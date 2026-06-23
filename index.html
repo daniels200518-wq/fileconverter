@@ -1,0 +1,219 @@
+<!doctype html>
+<!-- Fishtagged · Data Builder — turns the Core Sheet CSV into fish_index.json.
+     Self-contained: just open this file (double-click). No install, no internet needed. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Fishtagged · Data Builder</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{ --ink:#20292b; --label:#69736f; --hair:#e3e6e1; --field:#f3f6f2;
+         --green:#6f8c78; --green-dk:#5a7765; --rust-dk:#8f4a1f; }
+  *{ box-sizing:border-box; }
+  body{ margin:0; font-family:"Helvetica Neue",Helvetica,Arial,sans-serif; color:var(--ink);
+        background:var(--field); line-height:1.5; }
+  .wrap{ max-width:600px; margin:6vh auto; padding:0 16px; }
+  .card{ background:#fff; border:1px solid var(--hair); border-radius:12px; padding:30px 32px;
+         box-shadow:0 4px 20px rgba(20,33,31,.08); }
+
+  .logo{ display:flex; align-items:center; gap:8px; font-weight:800; letter-spacing:.03em; font-size:16px; }
+  .logo svg{ width:22px; height:22px; }
+  h1{ font-size:22px; margin:16px 0 6px; }
+  p.sub{ margin:0 0 24px; color:var(--label); font-size:14px; }
+
+  /* step 1 */
+  .lead{ font-size:11px; letter-spacing:.09em; text-transform:uppercase; color:var(--label);
+         font-weight:bold; margin-bottom:10px; }
+  .drop{ display:block; border:2px dashed var(--hair); border-radius:10px; padding:34px 20px;
+         text-align:center; color:var(--label); font-size:14px; cursor:pointer; transition:.15s; }
+  .drop:hover,.drop.over{ border-color:var(--green); background:#f7faf8; color:var(--ink); }
+  .drop b{ color:var(--green-dk); }
+  .drop.has{ border-style:solid; border-color:var(--green); background:#f7faf8; color:var(--ink); }
+  input[type=file]{ display:none; }
+
+  .actions{ margin-top:18px; }
+  button.build{ width:100%; height:46px; border:0; background:var(--green); color:#fff;
+                border-radius:8px; font-size:15px; font-weight:600; cursor:pointer; }
+  button.build:hover:not(:disabled){ background:var(--green-dk); }
+  button.build:disabled{ background:#cdd6d0; cursor:not-allowed; }
+  a.dl{ display:none; width:100%; height:46px; line-height:46px; text-align:center; background:var(--ink);
+        color:#fff; text-decoration:none; border-radius:8px; font-size:15px; font-weight:600; }
+  a.dl.on{ display:block; }
+
+  .log{ margin-top:16px; font-size:13.5px; color:var(--label); min-height:18px; }
+  .log.ok{ color:var(--ink); }
+  .log.bad{ color:#9a3318; }
+  .log b{ color:var(--ink); }
+
+  /* publish steps — everything the intern needs, on the page */
+  .how{ margin-top:26px; background:var(--field); border:1px solid var(--hair); border-radius:10px;
+        padding:20px 22px; }
+  .how h2{ font-size:13px; letter-spacing:.04em; text-transform:uppercase; color:var(--label); margin:0 0 12px; }
+  ol{ margin:0; padding-left:22px; }
+  ol li{ margin-bottom:9px; font-size:14px; }
+  ol li:last-child{ margin-bottom:0; }
+  code{ background:#e7eae5; border-radius:4px; padding:1px 5px; font-size:13px; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div class="logo">
+        <svg viewBox="0 0 24 24"><path d="M12 2C8.1 2 5 5 5 8.9 5 13.8 12 22 12 22s7-8.2 7-13.1C19 5 15.9 2 12 2z" fill="#6f8c78"/><circle cx="12" cy="9" r="2.7" fill="#fff"/></svg>
+        FISHTAGGED
+      </div>
+      <h1>Data Builder</h1>
+      <p class="sub">Turns the Core Data Sheet into the file the live tag-search runs on.</p>
+
+      <div class="lead">Step 1 · choose the file</div>
+      <label class="drop" id="drop">
+        <input type="file" id="file" accept=".csv,.geojson,.json">
+        Drag the <b>CSV</b> here, or <b>click to choose</b>
+      </label>
+
+      <div class="actions">
+        <button class="build" id="build" disabled>Build fish_index.json</button>
+        <a class="dl" id="dl" download="fish_index.json">⬇ Download fish_index.json</a>
+      </div>
+      <div class="log" id="log"></div>
+
+      <div class="how">
+        <h2>How to publish the update</h2>
+        <ol>
+          <li>In the Core Data Sheet: <b>File → Download → Comma-separated values (.csv)</b>.</li>
+          <li>Drop that CSV above and click <b>Build</b>, then <b>Download</b> <code>fish_index.json</code>.</li>
+          <li>Go to the <b>fishtagged-api</b> repository on GitHub, open <code>fish_index.json</code>, and replace it with the new one. <b>Commit.</b></li>
+          <li>The live search updates by itself in about a minute. Search a brand-new tag number to confirm.</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+<script>
+const LNG_MIN=-79.5, LNG_MAX=-76.0, LAT_MIN=38.0, LAT_MAX=40.6;
+const LNG_KEYS=["lng","lon","long","longitude","x"];
+const LAT_KEYS=["lat","latitude","y"];
+
+const num = v => { const s=(v==null?"":String(v)).trim(); if(s==="") return null; const n=Number(s); return isNaN(n)?null:n; };
+const str = v => (v==null?"":String(v)).trim();
+const title = s => str(s).toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+const round5 = x => Math.round(x*1e5)/1e5;
+const ts = s => { const t=Date.parse(s); return isNaN(t)?0:t; };
+
+function parseCSV(text){
+  if(text.charCodeAt(0)===0xFEFF) text=text.slice(1);
+  const rows=[]; let f="", row=[], q=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(q){ if(c==='"'){ if(text[i+1]==='"'){f+='"';i++;} else q=false; } else f+=c; }
+    else if(c==='"') q=true;
+    else if(c===','){ row.push(f); f=""; }
+    else if(c==='\n'){ row.push(f); rows.push(row); row=[]; f=""; }
+    else if(c!=='\r') f+=c;
+  }
+  if(f!==""||row.length){ row.push(f); rows.push(row); }
+  const head=rows.shift()||[];
+  return rows.filter(r=>r.length>1||(r[0]||"")!=="").map(r=>{ const o={}; head.forEach((h,j)=>o[h]=r[j]); return o; });
+}
+
+function records(text, name){
+  if(name.toLowerCase().endsWith(".csv")){
+    const rows=parseCSV(text);
+    const keys=Object.keys(rows[0]||{}); const low={}; keys.forEach(k=>low[k.toLowerCase()]=k);
+    const lngH=LNG_KEYS.map(k=>low[k]).find(Boolean), latH=LAT_KEYS.map(k=>low[k]).find(Boolean);
+    if(!lngH||!latH) throw "CSV needs a longitude and latitude column (e.g. Longitude / Latitude).";
+    return rows.map(r=>({lng:num(r[lngH]), lat:num(r[latH]), p:r})).filter(r=>r.lng!=null&&r.lat!=null);
+  }
+  const j=JSON.parse(text);
+  return (j.features||[]).map(f=>({lng:f.geometry?.coordinates?.[0], lat:f.geometry?.coordinates?.[1], p:f.properties||{}}))
+    .filter(r=>r.lng!=null&&r.lat!=null);
+}
+
+function clean(recs){
+  const out=[];
+  for(const {lng,lat,p} of recs){
+    if(!(lng>LNG_MIN&&lng<LNG_MAX&&lat>LAT_MIN&&lat<LAT_MAX)) continue;
+    let rc=str(p.Recaptured); if(rc!=="Tagged"&&rc!=="Recaptured") rc="Tagged";
+    out.push({ lng:round5(lng), lat:round5(lat), P:{
+      tag:str(p.NumberTag), color:title(p.ColorTag), alpha:str(p.Alpha),
+      sp:str(p.Species)||"Unknown", rc, dt:str(p.TagDateTimeUTC), yr:str(p.year),
+      spot:str(p.NamedSpot), in:num(p.SizeInch), mm:num(p.SizeMm), file:str(p.FileName), note:str(p.Notes),
+      tF:num(p.POR_WaterTemp_F), tC:num(p.POR_WaterTemp_C), lvl:num(p.POR_RiverLevel_ft),
+      turb:num(p.POR_Turbidity_FNU), do:num(p["POR_DissolvedOxygen_MG/L"]), cfs:num(p.POR_Discharge_CFS)
+    }});
+  }
+  return out;
+}
+
+const cap = f => { const p=f.P; return {lng:f.lng,lat:f.lat,dt:p.dt,rc:p.rc,spot:p.spot,in:p.in,mm:p.mm,
+  file:p.file,tF:p.tF,lvl:p.lvl,turb:p.turb,do:p.do,cfs:p.cfs}; };
+
+function buildIndex(features){
+  const groups=new Map(), byNum={}, tags=[];
+  for(const f of features){ const p=f.P; if(p.tag&&p.color){ const k=p.color+"|"+p.tag;
+    if(!groups.has(k)) groups.set(k,[]); groups.get(k).push(f); } }
+  for(const arr of groups.values()){
+    arr.sort((a,b)=>ts(a.P.dt)-ts(b.P.dt));
+    const first=arr[0].P;
+    if(!byNum[first.tag]) byNum[first.tag]=[];
+    byNum[first.tag].push(tags.length);
+    tags.push({num:first.tag,color:first.color,alpha:first.alpha,sp:first.sp,caps:arr.map(cap)});
+  }
+  for(const f of features){ const p=f.P; if(p.tag&&p.color) continue;
+    tags.push({num:p.tag,color:p.color,alpha:p.alpha,sp:p.sp,caps:[cap(f)]}); }
+
+  let mnX=999,mnY=999,mxX=-999,mxY=-999, recaps=0; const species={}, spot={};
+  for(const f of features){ mnX=Math.min(mnX,f.lng);mnY=Math.min(mnY,f.lat);mxX=Math.max(mxX,f.lng);mxY=Math.max(mxY,f.lat);
+    if(f.P.rc==="Recaptured") recaps++; species[f.P.sp]=(species[f.P.sp]||0)+1;
+    if(f.P.spot) spot[f.P.spot]=(spot[f.P.spot]||0)+1; }
+  const topSpots=Object.entries(spot).sort((a,b)=>b[1]-a[1]).slice(0,8).map(([s,n])=>({spot:s,n}));
+  const meta={ minzoom:6, maxzoom:12, bounds:[mnX,mnY,mxX,mxY], sourceLayer:"fish",
+    count:features.length, recaptures:recaps, journeys:tags.filter(t=>t.caps.length>1).length, species, topSpots };
+  return {meta, tags, byNum};
+}
+
+// ---- page glue ----
+const byId=id=>document.getElementById(id);
+let chosen=null, blobUrl=null;
+function log(msg,cls){ const e=byId("log"); e.innerHTML=msg; e.className="log "+(cls||""); }
+
+function pick(file){
+  chosen=file;
+  byId("build").disabled=!file;
+  byId("dl").classList.remove("on");
+  const d=byId("drop");
+  if(file){ d.classList.add("has"); d.innerHTML="Selected: <b>"+file.name+"</b><br>click to choose a different file"; }
+  else { d.classList.remove("has"); d.innerHTML='Drag the <b>CSV</b> here, or <b>click to choose</b>'; }
+  log("");
+}
+
+byId("file").addEventListener("change", e=> pick(e.target.files[0]));
+const drop=byId("drop");
+["dragover","dragenter"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add("over");}));
+["dragleave","drop"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove("over");}));
+drop.addEventListener("drop", e=>{ if(e.dataTransfer.files[0]) pick(e.dataTransfer.files[0]); });
+
+byId("build").onclick = ()=>{
+  if(!chosen) return;
+  log("Reading "+chosen.name+" …");
+  const reader=new FileReader();
+  reader.onload = ()=>{
+    try{
+      const recs=records(reader.result, chosen.name);
+      const features=clean(recs);
+      const idx=buildIndex(features);
+      const dropped=recs.length-features.length;
+      log(`<b>Built.</b> ${features.length.toLocaleString()} catches · ${idx.tags.length.toLocaleString()} tags · `
+        + `${idx.meta.journeys} caught more than once.`
+        + (dropped?`<br>Skipped ${dropped} rows (outside the river or missing coordinates).`:"")
+        + `<br>Now click <b>Download</b> below.`, "ok");
+      if(blobUrl) URL.revokeObjectURL(blobUrl);
+      blobUrl=URL.createObjectURL(new Blob([JSON.stringify(idx)],{type:"application/json"}));
+      const a=byId("dl"); a.href=blobUrl; a.classList.add("on");
+    }catch(err){ log("Couldn't build it: "+err, "bad"); }
+  };
+  reader.readAsText(chosen);
+};
+</script>
+</body>
+</html>
